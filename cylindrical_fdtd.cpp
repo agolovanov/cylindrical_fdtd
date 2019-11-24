@@ -20,7 +20,7 @@ public:
     }
 
     inline T & operator()(int i, int j, int k) const {
-        return data[n2 * n3 * i + n2 * j + k];
+        return data[n2 * n3 * i + n3 * j + k];
     }
 
     int get_n1() const { return n1; }
@@ -104,21 +104,25 @@ int nx, nr, nphi;
 double dx, dr, dphi, dt;
 
 
-void advance_e() {
+void advance_e(double dt) {
     // advancing axis values
     for (int k = 0; k < nx; k++) {
         int km = (k > 0 ? k-1 : nx-1);
-        ex0[k] = 0;
-        ephi0[k].re = 0;
-        ephi0[k].im = 0;
+        //ex0[k] = 0;
+        //ephi0[k].re = 0;
+        //ephi0[k].im = 0;
+        double tmp1 = 0;
+        complex tmp2;
+        tmp2.re = 0;
+        tmp2.im = 0;
         for (int j = 0; j < nphi; j++) {
-            ex0[k] += b(0, j, k).phi;
-            ephi0[k].re += b(0, j, k).x * cos(phi[j] + 0.5 * dphi);
-            ephi0[k].im -= b(0, j, k).x * sin(phi[j] + 0.5 * dphi);
+            tmp1 += b(0, j, k).phi;
+            tmp2.re += b(0, j, k).x * cos(phi[j] + 0.5 * dphi);
+            tmp2.im -= b(0, j, k).x * sin(phi[j] + 0.5 * dphi);
         }
-        ex0[k] *= dt * 2 * dphi / pi / dr;
-        ephi0[k].re *= - dt * 2 * dphi / pi / dr;
-        ephi0[k].im *= - dt * 2 * dphi / pi / dr;
+        ex0[k] += dt * 2 * dphi / pi / dr * tmp1;
+        ephi0[k].re += - dt * 2 * dphi / pi / dr * tmp2.re;
+        ephi0[k].im += - dt * 2 * dphi / pi / dr * tmp2.im;
         ephi0[k].re += dt * (br0[k].re - br0[km].re) / dx;
         ephi0[k].im += dt * (br0[k].im - br0[km].im) / dx;
     }
@@ -133,7 +137,7 @@ void advance_e() {
             e(i,j,k).x = ex0[k];
         }
     }
-    for (i = 1; i < nr; i++) {
+    for (i = 1; i < nr-1; i++) {
         for (int j = 0; j < nphi; j++) {
             for (int k = 0; k < nx; k++) {
                 int jm = (j > 0 ? j-1 : nphi-1);
@@ -146,17 +150,20 @@ void advance_e() {
     }
 }
 
-void advance_b() {
+void advance_b(double dt) {
     for (int k = 0; k < nx; k++) {
         int kp = (k < nx-1 ? k+1 : 0);
-        br0[k].re = 0;
-        br0[k].im = 0;
+        //br0[k].re = 0;
+        //br0[k].im = 0;
+        complex tmp;
+        tmp.re = 0;
+        tmp.im = 0;
         for (int j = 0; j < nphi; j++) {
-            br0[k].re += e(1, j, k).x * sin(phi[j]);
-            br0[k].im += e(1, j, k).x * cos(phi[j]);
+            tmp.re += e(1, j, k).x * sin(phi[j]);
+            tmp.im += e(1, j, k).x * cos(phi[j]);
         }
-        br0[k].re *= - dt * dphi / pi / dr;
-        br0[k].im *= - dt * dphi / pi / dr;
+        br0[k].re -= dt * dphi / pi / dr * tmp.re;
+        br0[k].im -= dt * dphi / pi / dr * tmp.im;
         br0[k].re += dt * (ephi0[kp].re - ephi0[k].re) / dx;
         br0[k].im += dt * (ephi0[kp].im - ephi0[k].im) / dx;
     }
@@ -195,7 +202,7 @@ cvector3d cylindrical_to_cartesian(const vector3d v) {
 void initialize_fields(function<double(cvector3d)> ex, function<double(cvector3d)> ey, function<double(cvector3d)> ez,
                        function<double(cvector3d)> bx, function<double(cvector3d)> by, function<double(cvector3d)> bz) {
 
-    cout << "Initialize fields" << endl;
+    cout << "Initialize 1D fields" << endl;
     int i = 0;
     for (int k = 0; k < nx; k++) {
         ex0[k] = ex({0, 0, (k + 0.5) * dx});
@@ -207,19 +214,26 @@ void initialize_fields(function<double(cvector3d)> ex, function<double(cvector3d
         br0[k].im = - bz({0, 0, (k + 0.5) * dx});
     }
 
-    for (i = 0; i < nr; i++) {
+    cout << "Initialize 3D fields" << endl;
+    for (i = 0; i < nr-1; i++) {
         for (int j = 0; j < nphi; j++) {
             for (int k = 0; k < nx; k++) {
+                //cout << "Init (" << i << ", " << j << ", " << k << ")" << endl;
                 cvector3d point = cylindrical_to_cartesian({r[i], phi[j], (k + 0.5) * dx});
                 e(i,j,k).x = ex(point);
 
                 double point_phi = phi[j];
                 point = cylindrical_to_cartesian({r[i] + 0.5 * dr, point_phi, k * dx});
                 e(i,j,k).r = ey(point) * cos(point_phi) + ez(point) * sin(point_phi);
+                //cout << "Er (" << r[i] + 0.5 * dr << ", " << point_phi << ", " << k * dx << ")->(" 
+                //       << point.x << ", " << point.y << ", " << point.z << ") = " << e(i,j,k).r << endl;
+                
 
-                point_phi = phi[j] + 0.5 * j;
+                point_phi = phi[j] + 0.5 * dphi;
                 point = cylindrical_to_cartesian({r[i], point_phi, k * dx});
                 e(i,j,k).phi = - ey(point) * sin(point_phi) + ez(point) * cos(point_phi);
+                //cout << "Ephi (" << r[i] << ", " << point_phi << ", " << k * dx << ")->(" 
+                //        << point.x << ", " << point.y << ", " << point.z << ") = " << e(i,j,k).phi << endl;
 
                 point = cylindrical_to_cartesian({r[i] + 0.5 * dr, point_phi, k * dx});
                 b(i,j,k).x = bx(point);
@@ -229,10 +243,11 @@ void initialize_fields(function<double(cvector3d)> ex, function<double(cvector3d
 
                 point_phi = phi[j];
                 point = cylindrical_to_cartesian({r[i] + 0.5 * dr, point_phi, (k + 0.5) * dx});
-                b(i,k,k).phi = - by(point) * sin(point_phi) + bz(point) * cos(point_phi);
+                b(i,j,k).phi = - by(point) * sin(point_phi) + bz(point) * cos(point_phi);
             }
         }
     }
+    cout << "Finish initialize fields" << endl;
 }
 
 void write_array(array3d<double> & field, std::string name, H5::H5File file) {
@@ -243,11 +258,11 @@ void write_array(array3d<double> & field, std::string name, H5::H5File file) {
     dataset.write(&(field(0,0,0)), H5::PredType::NATIVE_DOUBLE);
 }
 
-void output_fields(double t) {
-    string filename = "Fields" + to_string(t) + ".h5";
+void output_fields(int number) {
+    string filename = "Fields" + to_string(number) + ".h5";
     H5::H5File fields_file(filename, H5F_ACC_TRUNC);
 
-    cout << "Writing at " << to_string(t) << endl;
+    cout << "Writing at " << to_string(number) << endl;
 
     array3d<double> er(nr, nphi, nx);
     array3d<double> ephi(nr, nphi, nx);
@@ -278,12 +293,15 @@ void output_fields(double t) {
 }
 
 int main() {
-    double lx = 20;
-    double lr = 20;
+    double lx = 10;
+    double lr = 10;
 
-    nx = 100;
-    nr = 100;
+    nx = 200;
+    // nx = 1;
+    nr = 50;
+    // nr = 10;
     nphi = 30;
+    // nphi = 10;
 
     dx = lx / nx;
     dr = lr / nr;
@@ -311,20 +329,28 @@ int main() {
     int current_iteration = 0;
     int output_iteration = 0;
 
-    double x0 = lx / 2;
-    double sigma = 5;
+    double x0 = lx / 2 - 1;
+    double y0 = -2;
+    double angle = 30 * pi / 180;
+    double sigma = 3;
 
     auto empty_func = [] (cvector3d r) -> double {return 0.0;};
-    auto ey_func = [sigma, x0] (cvector3d r) -> double {return exp(- (r.x - x0) * (r.x - x0) / sigma /sigma - r.y * r.y / sigma / sigma - r.z * r.z / sigma / sigma) * cos(r.x / 2 / pi);};
+    auto ex_func = [sigma, x0, y0, angle] (cvector3d r) -> double {return -sin(angle) * exp(- (r.x - x0) * (r.x - x0) / sigma /sigma - (r.y - y0) * (r.y - y0) / sigma / sigma - r.z * r.z / sigma / sigma) * cos(2 * pi * (cos(angle) * r.x + sin(angle) * r.y));};
+    auto ey_func = [sigma, x0, y0, angle] (cvector3d r) -> double {return cos(angle) * exp(- (r.x - x0) * (r.x - x0) / sigma /sigma - (r.y - y0) * (r.y - y0) / sigma / sigma - r.z * r.z / sigma / sigma) * cos(2 * pi * (cos(angle) * r.x + sin(angle) * r.y));};
 
-    initialize_fields(empty_func, ey_func, empty_func, empty_func, empty_func, ey_func);
+    initialize_fields(ex_func, ey_func, empty_func, empty_func, empty_func, ey_func);
+    cout << "After init" << endl;
 
     while (current_iteration * dt <= tmax) {
         if (current_iteration * dt >= (output_iteration * output_dt)) {
-            output_fields(output_iteration * output_dt);
+            output_fields(output_iteration);
 
             output_iteration++;
         }
+        advance_b(0.5 * dt);
+        advance_e(dt);
+        advance_b(0.5 * dt);
+
         current_iteration++;
     }
 
