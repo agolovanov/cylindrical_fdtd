@@ -102,15 +102,14 @@ vector<complex> ephi0, br0;
 constexpr double pi = 3.14159265358979323846;
 int nx, nr, nphi;
 double dx, dr, dphi, dt;
+double a;
 
 
 void advance_e(double dt) {
     // advancing axis values
     for (int k = 0; k < nx; k++) {
         int km = (k > 0 ? k-1 : nx-1);
-        //ex0[k] = 0;
-        //ephi0[k].re = 0;
-        //ephi0[k].im = 0;
+
         double tmp1 = 0;
         complex tmp2;
         tmp2.re = 0;
@@ -131,8 +130,10 @@ void advance_e(double dt) {
     for (int j = 0; j < nphi; j++) {
         for (int k = 0; k < nx; k++) {
             int jm = (j > 0 ? j-1 : nphi-1);
+            int jmm = (jm > 0 ? jm - 1 : nphi-1);
+            int jp = (j < nphi-1 ? j+1 : 0);
             int km = (k > 0 ? k-1 : nx-1);
-            e(i,j,k).r += dt * ((b(i,j,k).x - b(i,jm,k).x) / (r[i] + 0.5 * dr) / dphi - (b(i,j,k).phi - b(i,j,km).phi) / dx);
+            e(i,j,k).r += dt * ((1 - a) / 3 * (b(i,jp,k).x - b(i,jmm,k).x) + a * (b(i,j,k).x - b(i,jm,k).x) / (r[i] + 0.5 * dr) / dphi - (b(i,j,k).phi - b(i,j,km).phi) / dx);
             e(i,j,k).phi = ephi0[k].re * cos(phi[j] + 0.5 * dphi) - ephi0[k].im * sin(phi[j] + 0.5 * dphi);
             e(i,j,k).x = ex0[k];
         }
@@ -141,10 +142,12 @@ void advance_e(double dt) {
         for (int j = 0; j < nphi; j++) {
             for (int k = 0; k < nx; k++) {
                 int jm = (j > 0 ? j-1 : nphi-1);
+                int jmm = (jm > 0 ? jm - 1 : nphi-1);
+                int jp = (j < nphi-1 ? j+1 : 0);
                 int km = (k > 0 ? k-1 : nx-1);
-                e(i,j,k).r += dt * ((b(i,j,k).x - b(i,jm,k).x) / (r[i] + 0.5 * dr) / dphi - (b(i,j,k).phi - b(i,j,km).phi) / dx);
+                e(i,j,k).r += dt * ((1 - a) / 3 * (b(i,jp,k).x - b(i,jmm,k).x) + a * (b(i,j,k).x - b(i,jm,k).x) / (r[i] + 0.5 * dr) / dphi - (b(i,j,k).phi - b(i,j,km).phi) / dx);
                 e(i,j,k).phi += dt * ((b(i,j,k).r - b(i,j,km).r) / dx - (b(i,j,k).x - b(i-1,j,k).x) / dr);
-                e(i,j,k).x += dt * ((b(i,j,k).phi - b(i-1,j,k).phi) / dr + 0.5 * (b(i,j,k).phi + b(i-1,j,k).phi) / r[i] - (b(i,j,k).r - b(i,jm,k).r) / (r[i] * dphi));
+                e(i,j,k).x += dt * ((b(i,j,k).phi - b(i-1,j,k).phi) / dr + 0.5 * (b(i,j,k).phi + b(i-1,j,k).phi) / r[i] - ((1 - a) / 3 * (b(i,jp,k).r - b(i,jmm,k).r) + a * (b(i,j,k).r - b(i,jm,k).r)) / (r[i] * dphi));
             }
         }
     }
@@ -172,20 +175,24 @@ void advance_b(double dt) {
     for (int j = 0; j < nphi; j++) {
         for (int k = 0; k < nx; k++) {
             int jp = (j < nphi-1 ? j+1 : 0);
+            int jpp = (jp < nphi-1 ? jp+1 : 0);
+            int jm = (j > 0 ? j-1 : nphi-1);
             int kp = (k < nx-1 ? k+1 : 0);
             b(i,j,k).r = br0[k].re * cos(phi[j] + 0.5 * dphi) - br0[k].im * sin(phi[j] + 0.5 * dphi);
             b(i,j,k).phi -= dt * ((e(i,j,kp).r - e(i,j,k).r) / dx - (e(i+1,j,k).x - e(i,j,k).x) / dr);
-            b(i,j,k).x -= dt * ((e(i+1,j,k).phi - e(i,j,k).phi) / dr + 0.5 * (e(i+1,j,k).phi + e(i,j,k).phi) / (r[i] + 0.5 * dr) - (e(i,jp,k).r - e(i,j,k).r) / (r[i] + 0.5 * dr) / dphi);
+            b(i,j,k).x -= dt * ((e(i+1,j,k).phi - e(i,j,k).phi) / dr + 0.5 * (e(i+1,j,k).phi + e(i,j,k).phi) / (r[i] + 0.5 * dr) - ((1 - a) / 3 * (e(i,jpp,k).r - e(i,jm,k).r) + a * (e(i,jp,k).r - e(i,j,k).r)) / (r[i] + 0.5 * dr) / dphi);
         }
     }
     for (i = 1; i < nr-1; i++) {
         for (int j = 0; j < nphi; j++) {
             for (int k = 0; k < nx; k++) {
                 int jp = (j < nphi-1 ? j+1 : 0);
+                int jpp = (jp < nphi-1 ? jp+1 : 0);
+                int jm = (j > 0 ? j-1 : nphi-1);
                 int kp = (k < nx-1 ? k+1 : 0);
-                b(i,j,k).r -= dt * ((e(i,jp,k).x - e(i,j,k).x) / r[i] / dphi - (e(i,j,kp).phi - e(i,j,k).phi) / dx);
+                b(i,j,k).r -= dt * (((1 - a) / 3 * (e(i,jpp,k).x - e(i,jm,k).x) + a * (e(i,jp,k).x - e(i,j,k).x)) / r[i] / dphi - (e(i,j,kp).phi - e(i,j,k).phi) / dx);
                 b(i,j,k).phi -= dt * ((e(i,j,kp).r - e(i,j,k).r) / dx - (e(i+1,j,k).x - e(i,j,k).x) / dr);
-                b(i,j,k).x -= dt * ((e(i+1,j,k).phi - e(i,j,k).phi) / dr + 0.5 * (e(i+1,j,k).phi + e(i,j,k).phi) / (r[i] + 0.5 * dr) - (e(i,jp,k).r - e(i,j,k).r) / (r[i] + 0.5 * dr) / dphi);
+                b(i,j,k).x -= dt * ((e(i+1,j,k).phi - e(i,j,k).phi) / dr + 0.5 * (e(i+1,j,k).phi + e(i,j,k).phi) / (r[i] + 0.5 * dr) - ((1 - a) / 3 * (e(i,jpp,k).r - e(i,jm,k).r) + a * (e(i,jp,k).r - e(i,j,k).r)) / (r[i] + 0.5 * dr) / dphi);
             }
         }
     }
@@ -205,35 +212,30 @@ void initialize_fields(function<double(cvector3d)> ex, function<double(cvector3d
     cout << "Initialize 1D fields" << endl;
     int i = 0;
     for (int k = 0; k < nx; k++) {
-        ex0[k] = ex({0, 0, (k + 0.5) * dx});
+        ex0[k] = ex({(k + 0.5) * dx, 0, 0});
 
-        ephi0[k].re = ez({0, 0, k * dx});
-        ephi0[k].im = ey({0, 0, k * dx});
+        ephi0[k].re = ez({k * dx, 0, 0});
+        ephi0[k].im = ey({k * dx, 0, 0});
 
-        br0[k].re = by({0, 0, (k + 0.5) * dx});
-        br0[k].im = - bz({0, 0, (k + 0.5) * dx});
+        br0[k].re = by({(k + 0.5) * dx, 0, 0});
+        br0[k].im = - bz({(k + 0.5) * dx, 0, 0});
     }
 
     cout << "Initialize 3D fields" << endl;
     for (i = 0; i < nr-1; i++) {
         for (int j = 0; j < nphi; j++) {
             for (int k = 0; k < nx; k++) {
-                //cout << "Init (" << i << ", " << j << ", " << k << ")" << endl;
                 cvector3d point = cylindrical_to_cartesian({r[i], phi[j], (k + 0.5) * dx});
                 e(i,j,k).x = ex(point);
 
                 double point_phi = phi[j];
                 point = cylindrical_to_cartesian({r[i] + 0.5 * dr, point_phi, k * dx});
                 e(i,j,k).r = ey(point) * cos(point_phi) + ez(point) * sin(point_phi);
-                //cout << "Er (" << r[i] + 0.5 * dr << ", " << point_phi << ", " << k * dx << ")->(" 
-                //       << point.x << ", " << point.y << ", " << point.z << ") = " << e(i,j,k).r << endl;
                 
 
                 point_phi = phi[j] + 0.5 * dphi;
                 point = cylindrical_to_cartesian({r[i], point_phi, k * dx});
                 e(i,j,k).phi = - ey(point) * sin(point_phi) + ez(point) * cos(point_phi);
-                //cout << "Ephi (" << r[i] << ", " << point_phi << ", " << k * dx << ")->(" 
-                //        << point.x << ", " << point.y << ", " << point.z << ") = " << e(i,j,k).phi << endl;
 
                 point = cylindrical_to_cartesian({r[i] + 0.5 * dr, point_phi, k * dx});
                 b(i,j,k).x = bx(point);
@@ -292,20 +294,24 @@ void output_fields(int number) {
     write_array(br, "Br", fields_file);
 }
 
+double calculate_discretization_coefficient(double dphi) {
+    return (1 - 2 * sin(1.5 * dphi) / 3 / dphi) / (2 * sin(0.5 * dphi) / dphi - 2 * sin(1.5 * dphi) / 3 / dphi);
+}
+
 int main() {
     double lx = 10;
     double lr = 10;
 
     nx = 200;
-    // nx = 1;
     nr = 50;
-    // nr = 10;
-    nphi = 30;
-    // nphi = 10;
+    nphi = 6;
 
     dx = lx / nx;
     dr = lr / nr;
     dphi = 2 * pi / nphi;
+
+    a = calculate_discretization_coefficient(dphi);
+    cout << "a = " << a << endl;
 
     double tmax = 10;
     double dt = 0.01;
@@ -331,7 +337,7 @@ int main() {
 
     double x0 = lx / 2 - 1;
     double y0 = -2;
-    double angle = 30 * pi / 180;
+    double angle = 0 * pi / 180;
     double sigma = 3;
 
     auto empty_func = [] (cvector3d r) -> double {return 0.0;};
